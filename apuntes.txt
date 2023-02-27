@@ -1,0 +1,72 @@
+K>> s_x = [zeros(512,1) ; s_x];
+K>> s_x = [s_x ; zeros(T_symb+CP-mod(length(s_x),T_symb+CP),1)];
+K>> A = reshape(s_x,T_symb+CP,length(s_x)/(T_symb+CP));
+K>> B =
+ B =
+    ↑
+Error: Invalid expression. Check for missing or extra characters.
+ 
+K>> B = sum(abs(A),2);
+K>> plot(abs(B))
+
+
+% Parámetros a fijar en el diseño radar.
+
+% Rm Máximo rango de detección
+% T Periodo de integración / frecuencia de muestreo
+% Pfa Probabilidad de falsa alarma (CFAR)
+% L Longitud del bloque Batch
+% R resolución de rango, cartesiano y biestático
+% V resolución de velocidad, cartesiano y biestático
+
+% COMPRENSION ALGORITMO BATCH
+% A mayor L, mayor precision en el procesado Doppler pero menor en el
+% rango.
+%
+% Dada una fs, minima y máxima desviacion Doppler posible en funcion de la
+% configuracion del algoritmo (L)  fdmax <= fs/(2*L) [-fs/2*L,+fs/2*L]
+%
+% Doppler shift menor que la mitad de la frecuencia de muestreo para evitar
+% problemas de aliasing. Extrapolando esto a bloques:
+%
+% Tb = L/fs
+% fs(bloque) = 1/Tb
+% fdmax <= fs(bloque)/2
+% fs(bloque)/2 = 1/2*Tb = fs/2*L
+%
+% Cual es el máximo retardo que es posible medir en el algoritmo batch en
+% funcion de la configuracion (L)  dmax <= L
+%
+% Traducir doppler shift y retardo a m/s y m
+% Máximo Doppler Shift => vmax = fs*c/4*L*f
+%
+% Ecuación Doppler Radar v = fd*c/2*f
+% Sustituyendo vmax = fs*c/4*L*f
+%
+% Máximo retardo => dmax = c*L/2*fs
+% Rango radar monoestático R = c*retraso/2
+% Sustituyendo Tb = L/fs => R = c*L/2*fs
+%
+% Criterio de seleccion de ventana (ancho lóbulo principal, nivel lobulos
+% secundarios), mínima separación espectral en funcion del ancho de banda
+% de ventana, resolucion de ventana. Mínima separación entre blancos para
+% que sean separables. Relación de potencia mínima para detectar un blanco
+
+% hacer un balance de potencia para ver cual va a ser la potencia recibida
+% esperada a nivel teórico para coches y para aviones. Me abro un excel y
+% tengo en cuenta frecuencia, distancias, RCS... usar la formula de Fritz
+
+% BW, determinado por la fs.
+% a partir de la potencia de ruido, caracterizar algoritmo.
+% que es lo que aguanta el algoritmo.
+% ejemplo suelo de ruido BW = 20e6 => -157 + 10*log10(20e6)
+% caracterizar algoritmo, determinar SNR minima
+
+% radarmetricplot(R*1e-3,SNR,DN, ...
+%     'MetricName','Available SNR', ...
+%     'RequirementName','Detectability', ...
+%     'MaxRangeRequirement',Rm*1e-3, ...
+%     'RangeUnit','km','MetricUnit','dB', ...
+%     'ShowStoplight',true, ...
+%     'RadarName',{'Surveillance Radar'});
+% title([{'Available SNR vs Range'}, {'(No Losses)'}]);
