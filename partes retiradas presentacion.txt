@@ -1,0 +1,62 @@
+\begin{frame}{Función de ambiguedad (AF)}
+La función de ambiguedad para una señal s se define como:
+\begin{center}
+\begin{math}
+\psi (m,k) = \displaystyle \sum_{n=0} ^{N-1} s(n) \cdot s^{*}(n-m) \cdot e^{-j\frac{2\pi}{N}kn}
+\end{math}
+\end{center}
+\begin{itemize}
+    \item Donde m es un número entero correspondiente al retardo aplicado y k es el desplazamiento en frecuencia.
+    \item Resultado: matriz 2D de retardos (filas) y Doppler (columnas).
+\end{itemize}
+\end{frame}
+\begin{frame}{Función de ambiguedad}
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.50]{ambgfun.png}
+    \label{fig:figura0}
+    \caption{AF señal DVB-T}
+\end{figure}
+\end{frame}
+\begin{frame}{Función de ambiguedad}
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.50]{ambgfun_freq.png}
+    \label{fig:figura0}
+    \caption{AF señal DVB-T (enventanado en frecuencia)}
+\end{figure}
+\end{frame}
+\begin{frame}{Función de ambiguedad}
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.50]{ambgfun_time.png}
+    \label{fig:figura0}
+    \caption{AF señal DVB-T (enventanado en el tiempo)}
+\end{figure}
+\end{frame}
+\begin{frame}{Función de ambiguedad}
+La conclusión extraible de las figuras anteriores es la siguiente.
+\begin{itemize}
+    \item El enventanado en el dominio del TIEMPO reduce los lóbulos secundarios en el dominio de la FRECUENCIA.
+    \item El enventanado en el dominio de la FRECUENCIA reduce los lóbulos secundarios en el dominio del TIEMPO.
+\end{itemize}
+\end{frame}
+
+
+\subsection{Estimación de canal}
+\begin{frame}{Estimación de canal}
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.40]{mapa.JPG}
+    \label{fig:figura0}
+    \caption{Esquema}
+\end{figure}
+\end{frame}
+\begin{frame}{Estimación de canal}
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.40]{Channel.png}
+    \label{fig:figura0}
+    \caption{Diagrama de bloques Estimación de canal}
+\end{figure}
+\end{frame}

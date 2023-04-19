@@ -5,23 +5,12 @@
 clc;
 clear all;
 
-%% DVB_T SIGNAL AND CARRIERS DECLARATION
+% DVB_T SIGNAL AND CARRIERS DECLARATION
 
 % DVB-T signal parameters (8K signal)
 
-BW = 8;                                 % Channel selection 5,6,7,8 (Mhz)
-n_symb = 128;                           % Number of OFDM superframes
-fs = (64/7)*1e6;                        % Sampling frequency (Hz)
-tx_mode = '8K';                         % Transmitter mode '2K','4K','8K', different number of carriers and Tu values for each mode...
-frame_offset = 0;                       % Frame offset
-guard = 1/32;                           % Guard interval length (fraction of T, page 33 table 14)
-T_symb = 8192;                          % Useful symbol time in samples
-CP = guard*T_symb;                      % Guard length in samples
-mod_type = '64-QAM';                    % Symbol modulation 'QPSK','16-QAM','64-QAM'
-M = 64;                                 % QAM modulation order
-alpha = 2;                              % Normalization factor for the modulation of the OFDM symbol (page 27)
-T = (n_symb*(T_symb + CP))/fs;          % Signal duration (in seconds)
-N = T*fs;                               % Signal length (it will serve as the CPI in this case)
+snr_db = 60;
+[s_rx,~,~,M,fs,T_symb,CP,n_symb,f] = scenario_generator_v2(snr_db);
 
 avg_symb_num = 4;
 
@@ -81,46 +70,22 @@ l = 0:67;
 p = 0:floor(Kmax/12);
 
 scatter_carriers = [12*p(1:end-1);3+12*p(1:end-1);6+12*p(1:end-1);9+12*p(1:end-1)];
-scatter_carriers = scatter_carriers';
 scatter_carriers_aux = scatter_carriers - Kmax/2;
 scatter_carriers_aux(scatter_carriers_aux<0) = scatter_carriers_aux(scatter_carriers_aux<0) + T_symb;
 
 wk = prbs_dvbt(Kmax+1);
 
-[s_rx,~] = dame_dvbt_bb_signal(BW, tx_mode, frame_offset, guard, mod_type, alpha, T);
-
 % First symbol starts at 8448 samples (perfect time synchronization)
 % locs = (T_symb+CP):(T_symb+CP):length(s_rx);
 
-%% CSS SYMBOL START ESTIMATOR
+% CSS SYMBOL START ESTIMATOR
 
 avg_value = 4;
 s_x = conj([s_rx; zeros(T_symb,1)]).*[zeros(T_symb,1); s_rx];
 s_x = conv(s_x, ones(CP,1));
 s_x = s_x(1:avg_value*(T_symb+CP));
-
-figure;
-plot(abs(s_x));
-grid on;
-title(['LP filtered correlated signal. AVG value = ',num2str(avg_value)])
-xlabel("Samples");
-
 A = reshape(s_x,T_symb+CP,length(s_x)/(T_symb+CP));
-
-figure;
-plot(abs(A));
-grid on;
-title(['Signal AVG BEFORE addition. AVG value = ',num2str(avg_value)])
-xlabel("Samples");
-
 estimate = sum(abs(A).^2,2);                               
-
-figure;
-plot(estimate);
-grid on;
-title(['Signal AVG AFTER addition. AVG value = ',num2str(avg_value)])
-xlabel("Samples");
-
 [~,peak_index] = max(estimate);
 
 if (peak_index > (T_symb+CP)/2)
@@ -129,39 +94,132 @@ end
 
 locs = peak_index:T_symb+CP:length(s_rx);
 
-%% CHANNEL ESTIMATION
+% CHANNEL ESTIMATION
+% 
+% H_avg = zeros(T_symb,avg_symb_num);
+% symb_mem = zeros(T_symb,avg_symb_num);
+% y_dp = zeros(T_symb+CP,length(s_rx)/(T_symb + CP));
+% y_oc = zeros(T_symb+CP,length(s_rx)/(T_symb + CP));     
+% memory_init_offset = avg_symb_num-1;
+% n = 1;
+%         
+% for i=1:((length(s_rx)/(T_symb + CP))+memory_init_offset)
+%     if (i< avg_symb_num)
+%         symb = s_rx(locs(i)+CP+1:min(locs(i+1),length(s_rx)));
+%         symb_mem(:,2:end) = symb_mem(:,1:end-1);          
+%         symb_mem(:,1) = symb;
+%  
+%         X = fft(symb_mem(:,1), T_symb);
+%             
+%         subframe_scatter_values = zeros(1,size(scatter_carriers,2));
+%         for j=1:size(scatter_carriers,2)
+%             subframe_scatter_values(:,j) = (abs(sum(X(scatter_carriers_aux(:,j)+1).*(((4/3)*2*(0.5-wk(scatter_carriers(:,j)+1)))'))))^2;
+%         end
+%     
+%         [~,subframe_number] = max(subframe_scatter_values);
+%             
+%         carriers = unique(sort([pilot_carriers' ; scatter_carriers(:,subframe_number)]));
+%         H = X(carriers+1)./(((4/3)*2*(0.5-wk(carriers+1)))');
+%             
+%         H_avg(:,2:end) = H_avg(:,1:end-1);
+%         H_avg(:,1) = interp1(carriers,H,1:T_symb,'linear','extrap')';
+%         
+%     else
+%         if i <= length(s_rx)/(T_symb + CP)
+% %             symb(1:min(T_symb,length(s_rx)-CP)) = s_rx((T_symb+CP)*(i-1)+CP+1:min((CP+T_symb)*(i),length(s_rx)));
+%             symb = s_rx(locs(i)+CP+1:min(locs(i+1),length(s_rx)));
+%             symb_mem(:,2:end) = symb_mem(:,1:end-1);          
+%             symb_mem(:,1) = symb;
+%  
+%             X = fft(symb_mem(:,1), T_symb);
+%             
+%             subframe_scatter_values = zeros(1,size(scatter_carriers,2));
+%             for j=1:size(scatter_carriers,2)
+%                 subframe_scatter_values(:,j) = (abs(sum(X(scatter_carriers_aux(:,j)+1).*(((4/3)*2*(0.5-wk(scatter_carriers(:,j)+1)))'))))^2;
+%             end
+%     
+%             [~,subframe_number] = max(subframe_scatter_values);
+%             
+%             carriers = unique(sort([pilot_carriers' ; scatter_carriers(:,subframe_number)]));
+%             H = X(carriers+1)./(((4/3)*2*(0.5-wk(carriers+1)))');
+%             
+%             H_avg(:,2:end) = H_avg(:,1:end-1);
+%             H_avg(:,1) = interp1(carriers,H,1:T_symb,'linear','extrap')';
+%         else
+%             symb = zeros(T_symb,1);
+%             symb_mem(:,2:end) = symb_mem(:,1:end-1);
+%             symb_mem(:,1) = symb;
+%         end
+%         
+%         Haux = sum(H_avg,2)./avg_symb_num;
+%         Yeq = (fft(symb_mem(:,end), T_symb))./Haux;
+%         
+%         % QAM decoder and symbol reconstruction
+%         Ydec = round(Yeq + (sqrt(M)/2-0.5)*(1+1j));
+%         Ydec(real(Ydec)>(sqrt(M)-1)) = (sqrt(M)-1) + 1j*imag(Ydec(real(Ydec)>(sqrt(M)-1)));
+%         Ydec(real(Ydec)<0) = 1j*imag(Ydec(real(Ydec)<0));
+%         Ydec(imag(Ydec)>(sqrt(M)-1)) = 1j*(sqrt(M)-1) + real(Ydec(imag(Ydec)>(sqrt(M)-1)));
+%         Ydec(imag(Ydec)<0) = real(Ydec(imag(Ydec)<0));
+%         Ydec(:) = Ydec - (sqrt(M)/2-0.5)*(1+1j);
+%         Ydec(pilot_carriers+1) = ((4/3)*2*(0.5-wk(pilot_carriers+1))); 
+%         Ydec(T_symb/2-round(T_symb*0.05):T_symb/2+round(T_symb*0.05),:) = 0;
+%         
+%         y_rx = ifft(Ydec);
+%         y_rx_cp = [y_rx(end-CP+1:end); y_rx];
+%         y_dp(:,n) = y_rx_cp;
+% 
+%         Yobs = X-Ydec.*Haux;
+%         y_obs = ifft(Yobs);
+%         y_obs_cp = [y_obs(end-CP+1:end); y_obs];
+%         y_oc(:,n) = y_obs_cp;
+%         
+%         n = n+1;
+%     end
+% end
+% 
+% y_dp = reshape(y_dp,[],1);
+% y_oc = reshape(y_oc,[],1);
+
+% CHANNEL ESTIMATION V3
 
 H_avg = zeros(T_symb,avg_symb_num);
 symb_mem = zeros(T_symb,avg_symb_num);
-y_dp = zeros(T_symb+CP,length(s_rx)/(T_symb + CP));
-y_oc = zeros(T_symb+CP,length(s_rx)/(T_symb + CP));     
+y_dp = zeros(T_symb+CP,round(length(s_rx)/(T_symb + CP)));
+y_oc = zeros(T_symb+CP,round(length(s_rx)/(T_symb + CP)));     
 memory_init_offset = avg_symb_num-1;
 n = 1;
         
 for i=1:((length(s_rx)/(T_symb + CP))+memory_init_offset)
     if (i< avg_symb_num)
-        symb = s_rx(locs(i)+CP+1:min(locs(i+1),length(s_rx)));
+        symb = zeros(T_symb,1);
+        symb(1:min(T_symb,length(s_rx)-CP)) = s_rx((T_symb+CP)*(i-1)+CP+1:min((CP+T_symb)*(i),length(s_rx)));
         symb_mem(:,2:end) = symb_mem(:,1:end-1);          
         symb_mem(:,1) = symb;
  
-        X = fft(symb_mem(:,1), T_symb);
+        X = fft(symb_mem(:,1), T_symb)';
             
-        subframe_scatter_values = zeros(1,size(scatter_carriers,2));
-        for j=1:size(scatter_carriers,2)
-            subframe_scatter_values(:,j) = (abs(sum(X(scatter_carriers_aux(:,j)+1).*(((4/3)*2*(0.5-wk(scatter_carriers(:,j)+1)))'))))^2;
+        subframe_scatter_values = zeros(1,size(scatter_carriers,1));
+        for j=1:size(scatter_carriers,1)
+            subframe_scatter_values(j) = abs(sum(X(scatter_carriers_aux(j,:)+1).*((4/3)*2*(0.5-wk(scatter_carriers(j,:)+1)))))^2;
         end
     
         [~,subframe_number] = max(subframe_scatter_values);
             
-        carriers = unique(sort([pilot_carriers' ; scatter_carriers(:,subframe_number)]));
-        H = X(carriers+1)./(((4/3)*2*(0.5-wk(carriers+1)))');
-            
+        pilot_inf = wk(pilot_carriers+1);
+        Y(pilot_carriers+1) = (4/3)*2*(0.5-pilot_inf);
+
+        scatt_inf = wk(scatter_carriers(subframe_number,:)+1);
+        Y(scatter_carriers_aux(subframe_number,:)+1) = (4/3)*2*(0.5-scatt_inf);
+
+        H(pilot_carriers+1) = X(pilot_carriers+1)./Y(pilot_carriers+1);
+        H(scatter_carriers_aux(subframe_number,:)+1) = X(scatter_carriers_aux(subframe_number,:)+1)./Y(scatter_carriers_aux(subframe_number,:)+1);
+        
+        carriers = unique(sort([pilot_carriers , scatter_carriers_aux(subframe_number,:)]));
         H_avg(:,2:end) = H_avg(:,1:end-1);
-        H_avg(:,1) = interp1(carriers,H,1:T_symb,'linear','extrap')';
+        H_avg(:,1) = interp1(carriers,H(carriers),1:T_symb,'linear','extrap')';
         
     else
         if i <= length(s_rx)/(T_symb + CP)
-%             symb(1:min(T_symb,length(s_rx)-CP)) = s_rx((T_symb+CP)*(i-1)+CP+1:min((CP+T_symb)*(i),length(s_rx)));
             symb = s_rx(locs(i)+CP+1:min(locs(i+1),length(s_rx)));
             symb_mem(:,2:end) = symb_mem(:,1:end-1);          
             symb_mem(:,1) = symb;
@@ -175,9 +233,17 @@ for i=1:((length(s_rx)/(T_symb + CP))+memory_init_offset)
     
             [~,subframe_number] = max(subframe_scatter_values);
             
-            carriers = unique(sort([pilot_carriers' ; scatter_carriers(:,subframe_number)]));
-            H = X(carriers+1)./(((4/3)*2*(0.5-wk(carriers+1)))');
-            
+            pilot_inf = wk(pilot_carriers+1);
+            Y(pilot_carriers+1) = (4/3)*2*(0.5-pilot_inf);
+
+            scatt_inf = wk(scatter_carriers(subframe_number,:)+1);
+            Y(scatter_carriers_aux(subframe_number,:)+1) = (4/3)*2*(0.5-scatt_inf);
+
+            H(pilot_carriers+1) = X(pilot_carriers+1)./Y(pilot_carriers+1);
+            H(scatter_carriers_aux(subframe_number,:)+1) = X(scatter_carriers_aux(subframe_number,:)+1)./Y(scatter_carriers_aux(subframe_number,:)+1);
+
+            H(H==0) = [];
+            carriers = unique(sort([pilot_carriers , scatter_carriers_aux(subframe_number,:)]));
             H_avg(:,2:end) = H_avg(:,1:end-1);
             H_avg(:,1) = interp1(carriers,H,1:T_symb,'linear','extrap')';
         else

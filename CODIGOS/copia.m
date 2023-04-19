@@ -12,7 +12,7 @@ n_symb  = 128; % Number of symbols
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % M-QAM symbols over each carrier
-M       = 16;
+M       = 64;
 symbols = (randi(sqrt(M),[T_symb,n_symb])-(sqrt(M)+1)/2) + 1j*(randi(sqrt(M),[T_symb,n_symb])-(sqrt(M)+1)/2);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -33,15 +33,15 @@ s_tx = ifft(symbols,T_symb,1);
 s_tx = [s_tx(end-CP+1:end,:); s_tx];
 s_tx = s_tx(:);
 s_tx = s_tx/sqrt(mean(abs(s_tx).^2)); % Unit power normalization
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%% Channel Model
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Direct Path to noise power ratio
-SNR = 60;
+% 
+% %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% %% Channel Model
+% %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% 
+% % Direct Path to noise power ratio
+SNR = 10;
 snr = 10^(SNR/10);
-
+% 
 % Set antenna transmitter position
 r_tx = [-5e3;0;0];
 
@@ -89,6 +89,7 @@ s_rx = s_rx + (1/sqrt(snr))*(randn(size(s_rx)) + 1j*randn(size(s_rx)))/sqrt(2);
 %% Signal Separation Algorithm
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+s_rx = s_tx;
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Cross-Correlation of the received signal
 s_x = conj([s_rx; zeros(T_symb,1)]).*[zeros(T_symb,1); s_rx];
@@ -173,7 +174,7 @@ for i = 1:(length(sof)-1)
     Ydec(imag(Ydec)>(sqrt(M)-1)) = 1j*(sqrt(M)-1) + real(Ydec(imag(Ydec)>(sqrt(M)-1)));
     Ydec(imag(Ydec)<0) = real(Ydec(imag(Ydec)<0));
     Ydec(:) = Ydec - (sqrt(M)/2-0.5)*(1+1j);
-    Ydec(pilot_carr) = pilot_data; 
+    Ydec(pilot_carr) = pilot_data;
     Ydec(T_symb/2-round(T_symb*0.05):T_symb/2+round(T_symb*0.05),:) = 0;
     % 8) Signal reconstruction
     y_rx(:) = ifft(Ydec);
