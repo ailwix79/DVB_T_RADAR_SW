@@ -59,6 +59,43 @@ title("Doppler shift (Zero Doppler closeup)")
 xlabel("Doppler frequency (Hz)")
 ylabel("Normalised Power level (dB)")
 
+%% TIEMPO Y DETECCIONES
+
+figure;
+plot(delay,20*log10(afmagdel),'r')
+grid on;
+title("Delay")
+xlabel("Delay (seconds)")
+ylabel("Normalised Power level (dB)")
+
+%% TIPOS DE VENTANAS
+N=16384;
+Fs=1.024e6;
+
+Ts=1/Fs;
+windows = {'rectwin', 'hamming', 'hann', 'blackman', 'chebwin'};
+
+for i=1:length(windows)
+    hn = window(windows{i},60);
+    f = [0:N-1]/N;
+    hn_abs=(abs(fft(hn,N)));
+    hn_ss=hn_abs(1:N/2);
+    hn_dc(1)=hn_ss(1);
+    hn_rest(2:N/2)=2*hn_ss(2:N/2);
+    hn_final(1)=hn_rest(1);
+    hn_final(2:N/2)=(hn_rest(2:N/2))./sqrt(2);
+    op=mag2db(hn_final/max(hn_final));
+    f=(0:Fs/N:(Fs/2-Fs/N));
+    plot(f(1:N/2),op,'DisplayName',windows{i},'LineWidth',1);
+    hold on;
+    grid on;
+    title("Window frequency response")
+    xlabel("Frequency (Hz)")
+    ylabel("Power lvl (dB)")
+    legend('show')
+end
+
+
 %% ENVENTANADO EN EL TIEMPO
 
 [s_x,~] = dame_dvbt_bb_signal(BW, tx_mode, frame_offset, guard, mod_type, alpha, T);

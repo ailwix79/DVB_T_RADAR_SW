@@ -31,6 +31,9 @@ function [y,Tu,cont_pilot_carriers,data] = dame_dvbt_bb_signal(BW, tx_mode, fram
 
 % DVB-T Transmitter Sampling Frequency
 fs = [64/7, 8, 48/7, 40/7, 5]*1e6; % Hz for an 8, 7, 6 and 5 MHz channel respectively
+tps_bits = zeros(1,54);            % TPS signaling bits
+tps_bits(18:23) = [0,1,0,1,1,1];
+
 switch BW
 	case 8
 		fs = fs(1);
@@ -51,24 +54,41 @@ switch mod_type
 		c = 1/sqrt(2);
 	case '16-QAM'
 		M = 16;
+        tps_bits(27) = 1;
 		switch alpha
 			case 1
 				c = 1/sqrt(10);
+                tps_bits(30) = 1;
 			case 2
 				c = 1/sqrt(20);
+                tps_bits(29) = 1;
 			case 4
 				c = 1/sqrt(52);
+                tps_bits(29:30) = 1;
 		end
 	case '64-QAM'
 		M = 64;
+        tps_bits(26) = 1;
 		switch alpha
 			case 1
 				c = 1/sqrt(42);
+                tps_bits(30) = 1;
 			case 2
 				c = 1/sqrt(60);
+                tps_bits(29) = 1;
 			case 4
 				c = 1/sqrt(108);
+                tps_bits(29:30) = 1;
 		end
+end
+
+switch guard
+    case 1/16
+        tps_bits(38) = 1;
+    case 1/8
+        tps_bits(37) = 1;
+    case 1/4
+        tps_bits(37:38) = 1;
 end
 
 % Overall signal simulation period (expressed in samples)
@@ -151,11 +171,13 @@ switch tx_mode
         tps_carriers = tps_carriers(1:34);
         Kmax = 3408;    % Tambien valdría max(cont_pilot_carriers)
 		Tu = 4096;
+        tps_bits(39) = 1;
     case '8K'
         % 8K Mode
         Kmax = 6816;
 		Tu = 8192;
 		L_inf = 6048;
+        tps_bits(40) = 1;
     otherwise
         error('Invalid MODE identifier!') 
 end
@@ -197,8 +219,10 @@ cont_pilot_carriers(cont_pilot_carriers<0) = cont_pilot_carriers(cont_pilot_carr
 % Formula en pagina 28, situate scattered pilot cells
 Y(cont_pilot_carriers+1,:) = (4/3)*2*(0.5-repmat(cont_pilot_inf(:),1,nsymb));
 
+tps_carriers_inf = wk(tps_carriers+1);
 tps_carriers(:) = tps_carriers - Kmax/2;
 tps_carriers(tps_carriers<0) = tps_carriers(tps_carriers<0) + Tu;
+tps_carriers = sort(tps_carriers);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Scatter Pilots
@@ -218,6 +242,35 @@ data = complex(zeros(L_inf,1));
 
 % Scatter pilots for every frame within a super frame
 for l = frame_offset:(nsymb+frame_offset-1)
+    switch mod(l,2)
+        case 0
+            tps_bits(2:17) = [1,1,0,0,1,0,1,0,0,0,0,1,0,0,0,1];
+        otherwise
+            tps_bits(2:17) = [0,0,1,1,0,1,0,1,1,1,1,0,1,1,1,0];
+    end
+    
+    switch mod(l,4)
+        case 1
+            tps_bits(25) = 1;
+        case 2
+            tps_bits(24) = 1;
+        case 3
+            tps_bits(24:25) = 1;
+    end
+    
+    tps_info = [zeros(1,60), tps_bits(2:54)];
+    tps_cp = bchenc(gf(tps_info),127,113);
+    tps_data = [tps_bits(1),tps_cp(61:end)];
+    
+%     Y(tps_carriers+1,1) = 2*(0.5-tps_carriers_inf);
+%     
+%     switch tps_bits(2)
+%         case 0
+%             Y(tps_carriers+1,l-frame_offset+1) = Y(tps_carriers+1,l-frame_offset).*tps_data';
+%         case 1
+%             Y(tps_carriers+1,l-frame_offset+1) = -1*(Y(tps_carriers+1,l-frame_offset).*tps_data');
+%     end
+    
     tmp(:) = 3*mod(l,4)+12*p;
 	scatt_pilot_inf(:) = wk(scatt_pilot_carriers(mod(l,4)+1,:)+1);
 	Y(scatt_pilot_carriers_aux(mod(l,4)+1,:)+1,l-frame_offset+1) = (4/3)*2*(0.5-scatt_pilot_inf(:));

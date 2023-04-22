@@ -6,14 +6,17 @@ clc;
 
 %% SCENARIO PREPARAION
 
-SNR = 65;
+SNR = -40:5:100;
+lv = zeros(1,length(SNR));
+
+for o=1:length(SNR)
 AVG = 8;
 L_inf = 6048;
 c = 1/sqrt(60);
 
-[s_rx,~,~,original_data,M,fs,Tu,CP,n_symb,f] = scenario_generator_DVBT(SNR);
+[s_rx,~,~,original_data,M,fs,Tu,CP,n_symb,f] = scenario_generator_DVBT(SNR(o));
 
-%% DECLARATION OF FIXED BY STANDART SIGNAL PARAMETERS
+% DECLARATION OF FIXED BY STANDART SIGNAL PARAMETERS
 
 Kmin = 0;
 Kmax = 6816;
@@ -71,7 +74,7 @@ scatt_pilot_inf = (4/3)*2*(0.5-wk(scatt_pilot_carriers+1));
 scatt_pilot_carriers_aux = scatt_pilot_carriers - Kmax/2;
 scatt_pilot_carriers_aux(scatt_pilot_carriers_aux<0) = scatt_pilot_carriers_aux(scatt_pilot_carriers_aux<0) + Tu;
 
-%% CHANNEL ESTIMATION
+% CHANNEL ESTIMATION
 
 % Perfect synchronization (signal starts at sample zero)
 locs = 0:(Tu+CP):length(s_rx);
@@ -200,148 +203,12 @@ lfft = 2^(nextpow2(2*L-1));
 factor_interp = 4;
     
 [Y2,cols] = batch_corr_algorithm(s_rx,s_tx,L,factor_interp);
-Y2 = Y2-mean(abs(Y2),"all");
+lv(o) = 20*log10(abs(Y2(899,222))) - 20*log10(mean(abs(Y2),"all"));
 
-figure('Name','Range-Doppler Map');
-a1 = axes();
-imagesc(a1,((0:(2^nextpow2(cols)-1))/2^nextpow2(cols)-0.5)*(fs/L)*3e8/(2*f),(0:(L-1))*3e8/(2*fs),10*log10((abs(Y2)).^2))
-xlim(a1,[-3e8*fs/(4*L*f),3e8*fs/(4*L*f)])
-ylim(a1,[0,(L-1)*3e8/(2*fs)])
-ylabel(a1,'Bistatic Range (m)','Interpreter','Latex')
-xlabel(a1,'Bistatic Velocity (m/s)','Interpreter','Latex')
-zlabel(a1,'Power Level (dB)','Interpreter','Latex')
-title(a1,['SNR = ',num2str(SNR),' dB, $T_{coh} = ',num2str(cols*L/fs,'%4.2f'),'$ sec.'],'Interpreter','Latex')
-shading interp
-colormap jet
-colorbar
-
-figure('Name','Range-Doppler Map');
-a1 = axes();
-surf(a1,((0:(2^nextpow2(cols)-1))/2^nextpow2(cols)-0.5)*(fs/L)*3e8/(2*f),(0:(L-1))*3e8/(2*fs),10*log10((abs(Y2)).^2))
-xlim(a1,[-3e8*fs/(4*L*f),3e8*fs/(4*L*f)])
-ylim(a1,[0,(L-1)*3e8/(2*fs)])
-ylabel(a1,'Bistatic Range (m)','Interpreter','Latex')
-xlabel(a1,'Bistatic Velocity (m/s)','Interpreter','Latex')
-zlabel(a1,'Power Level (dB)','Interpreter','Latex')
-title(a1,['SNR = ',num2str(SNR),' dB, $T_{coh} = ',num2str(cols*L/fs,'%4.2f'),'$ sec.'],'Interpreter','Latex')
-shading interp
-colormap jet
-colorbar
-
-%% CA CFAR ALGORITHM
-
-% Initialization parameters
-% CAF values (abs for detection purposes)
-Y = abs(Y2);
-% Reference cells
-N = 20;
-% Guard cells
-G = 10;
-% False alarm probability
-P_fa = 0.0001;
-
-% Padding for border detections
-Y = padarray(Y,[N+G,N+G],mean(Y,"all"),'both');
-[R,D] = size(Y);
-
-% Alpha calculation (for threshold estimation)
-alpha = N*(P_fa^(-1/N)-1);
-% Final vector initialization
-cfar = zeros(R,D);
-detections = zeros(R,D);
-detected_values = zeros(R,D);
-
-% Initialize loop and limit its span to only valid detections
-for i = (N+G+1):(R-N-G)
-    if floor(100*i/((R-N-G)-(N+G+1))) > floor(100*(i-1)/((R-N-G)-(N+G+1)))
-        clc;
-        fprintf('Aplicando CA CFAR ... (%3.0f %%)\n',floor(100*i/((R-N-G)-(N+G+1))));
-    end
-        
-    for j = (N+G+1):(D-N-G)
-        % Calculate train average value from reference cells
-        train_avg = (sum(sum(Y(i-N-G:i+N+G, j-N-G:j+N+G))) - 2*sum(Y(i,j)) - sum(sum(Y(i-G:i+G, j-G:j+G))))/((2*(N+G))^2-(2*G)^2);
-        % Calculate threshold
-        threshold = alpha * train_avg;
-        % Store threshold value for future plotting
-        cfar(i,j) = threshold;
-        % Compare detection threshold to CUT
-        if Y(i,j) > threshold
-            detections(i,j) = 1;
-            detected_values(i,j) = Y(i,j);
-        end
-    end
 end
-
-%% BISTATIC PARAMETER ESTIMATION
-
-% Obtain detection groups
-[groups,num_groups] = bwlabel(detections);
-
-for i=1:num_groups
-    % Isolate detection group
-    [r,c] = find(groups==i);
-    % Prepare cell indexes
-    range = sort(unique(r));
-    velocity = sort(unique(c));
-    % Extract detection values
-    one_det = detected_values(range,velocity);
-    % Fit parabola to values
-    [pr,Sr] = polyfit(range,sum(one_det,2),2);
-    [pv,Sv] = polyfit(velocity,sum(one_det),2);
-    % Obtain detection from derivative of polinomial
-    iR = roots(polyder(pr));
-    iV = roots(polyder(pv));
-    
-    figure;
-    hold on;
-    grid on;
-    plot(linspace(min(range),max(range)),20*log10(polyval(pr,linspace(min(range),max(range)))));
-    plot(range,20*log10(sum(one_det,2)),'-o');
-    plot(iR,max(20*log10(polyval(pr,linspace(min(range),max(range))))),'^k','LineWidth',1);
-    title("Parabola fitted (Range dimension)");
-    xlabel("Range cells");
-    ylabel("Amplitude (dB)");
-    legend("Fitted parabola","CAF values","Estimated position",'Location','southwest');
-    
-    figure;
-    hold on;
-    grid on;
-    plot(linspace(min(velocity),max(velocity)),20*log10(polyval(pv,linspace(min(velocity),max(velocity)))));
-    plot(velocity,20*log10(sum(one_det)),'-o');
-    plot(iV,max(20*log10(polyval(pv,linspace(min(velocity),max(velocity))))),'^k','LineWidth',1);
-    title("Parabola fitted (Velocity dimension)");
-    xlabel("Velocity cells");
-    ylabel("Amplitude (dB)");
-    legend("Fitted parabola","CAF values","Estimated position",'Location','southwest');
-end
-
-% Eliminate added padding
-detections = detections(N+G+1:R-N-G,N+G+1:D-N-G);
-cfar = cfar(N+G+1:R-N-G,N+G+1:D-N-G);
-
-figure('Name','Detections');
-a1 = axes();
-imagesc(a1,((0:(2^nextpow2(cols)-1))/2^nextpow2(cols)-0.5)*(fs/L)*3e8/(2*f),(0:(L-1))*3e8/(2*fs),detections)
-xlim(a1,[-3e8*fs/(4*L*f),3e8*fs/(4*L*f)])
-ylim(a1,[0,(L-1)*3e8/(2*fs)])
-ylabel(a1,'Bistatic Range (m)','Interpreter','Latex')
-xlabel(a1,'Bistatic Velocity (m/s)','Interpreter','Latex')
-zlabel(a1,'Power Level (dB)','Interpreter','Latex')
-title(a1,['SNR = ',num2str(SNR),' dB, $P_{fa} = ',num2str(P_fa),'$'],'Interpreter','Latex')
-shading interp
-colormap jet
-colorbar;
-
-figure('Name','CFAR Thresholds');
-a1 = axes();
-imagesc(a1,((0:(2^nextpow2(cols)-1))/2^nextpow2(cols)-0.5)*(fs/L)*3e8/(2*f),(0:(L-1))*3e8/(2*fs),cfar)
-xlim(a1,[-3e8*fs/(4*L*f),3e8*fs/(4*L*f)])
-ylim(a1,[0,(L-1)*3e8/(2*fs)])
-ylabel(a1,'Bistatic Range (m)','Interpreter','Latex')
-xlabel(a1,'Bistatic Velocity (m/s)','Interpreter','Latex')
-zlabel(a1,'Power Level (dB)','Interpreter','Latex')
-title(a1,['SNR = ',num2str(SNR),' dB, $P_{fa} = ',num2str(P_fa),'$'],'Interpreter','Latex')
-shading interp
-colormap jet
-colorbar;
+plot(SNR,lv,'LineWidth',1);
+hold on;
+grid on;
+title("Batch algorithm behavior vs SNR value")
+xlabel("SNR (db)")
+ylabel("Power difference (dB)")
